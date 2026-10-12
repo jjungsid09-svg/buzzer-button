@@ -65,6 +65,10 @@ kbd{font-family:inherit;font-size:.8em;padding:1px 7px;border-radius:6px;border:
 .q-text{font-size:clamp(2.4rem,5.6vw,5.4rem);font-weight:900;line-height:1.28;word-break:keep-all;letter-spacing:-.01em}
 .q-ans{display:inline-block;margin-top:18px;padding:8px 28px;border-radius:18px;background:var(--gold);color:var(--stage2);font-size:clamp(1.8rem,4vw,3.6rem);font-weight:900}
 .q-oral{color:var(--soft);font-size:1.15rem}
+.oral-in{margin-top:12px;display:flex;justify-content:center}
+.oral-in input{width:min(620px,100%);padding:10px 16px;border-radius:14px;border:2px solid var(--line);background:rgba(255,255,255,.08);font-size:1rem;color:#fff;text-align:center}
+.oral-in input::placeholder{color:rgba(255,255,255,.5)}
+.oral-in input:focus{outline:none;border-color:var(--gold)}
 .auto{display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:12px;background:rgba(0,0,0,.25);font-weight:700;font-size:.92rem;color:var(--soft)}
 .auto .sw2{width:34px;height:20px;border-radius:999px;background:rgba(255,255,255,.25);position:relative;transition:background .2s}
 .auto .sw2::after{content:"";position:absolute;left:3px;top:3px;width:14px;height:14px;border-radius:50%;background:#fff;transition:transform .2s}
@@ -526,10 +530,14 @@ function newRoomData(){
   for (let i = 1; i <= 6; i++) groups["g" + i] = { name: i + "모둠", color: COLORS[i - 1], score: 0 };
   return { groups, phase: "idle", attempt: 0, qi: -1, showAnswer: false, createdAt: firebase.database.ServerValue.TIMESTAMP };
 }
-async function createRoom(){
+async function createRoom(keep){
   for (let i = 0; i < 20; i++) {
     const c = String(Math.floor(1000 + Math.random() * 9000));
-    const res = await db.ref(`${ROOT}/rooms/${c}`).transaction(cur => cur ? undefined : newRoomData());
+    const res = await db.ref(`${ROOT}/rooms/${c}`).transaction(cur => {
+      if (cur) return undefined;
+      const d = newRoomData();
+      return d;
+    });
     if (res.committed) { save("qb_teacher_code", c); return c; }
   }
   throw new Error("room");
@@ -625,12 +633,12 @@ function nextQuestion(){
   if (!room) return;
   clearTimeout(reopenTimer); clearTimeout(autoTimer);
   const qs = room.questions || [];
-  let qi = room.qi ?? -1;
+  let qi = room.qi ?? -1, oralNo = room.oralNo || 1;
   if (qi >= 0) {
     if (qi + 1 < qs.length) qi++;
     else { toast("준비한 문제를 다 냈어요. 말로 내기로 바뀌어요"); clearTimeout(autoTimer); qi = -1; }
-  }
-  roomRef.update({ qi, showAnswer: false, locked: null, buzzes: null, phase: "idle", lastResult: null }).catch(fail);
+  } else oralNo++;
+  roomRef.update({ qi, oralNo, oralText: null, showAnswer: false, locked: null, buzzes: null, phase: "idle", lastResult: null }).catch(fail);
 }
 /* 포인터 아래 버튼: 지금 상황에서 할 일을 한 번에 */
 function clickerNext(){
@@ -652,7 +660,7 @@ function clickerPrev(){
 }
 function setMode(qi){
   clearTimeout(reopenTimer); clearTimeout(autoTimer);
-  roomRef.update({ qi, showAnswer: false, locked: null, buzzes: null, phase: "idle", lastResult: null }).catch(fail);
+  roomRef.update({ qi, oralText: null, showAnswer: false, locked: null, buzzes: null, phase: "idle", lastResult: null }).catch(fail);
 }
 /* 자동 다음 문제: 준비한 문제 모드에서만, 몇 초 뒤 넘어감 */
 let autoTimer = null;
@@ -687,6 +695,8 @@ function renderTeacher(){
   if (qi >= 0 && qs[qi]) {
     qh = `<div class="q-num">문제 ${qi + 1} / ${qs.length}</div><div class="q-text">${esc(qs[qi].q)}</div>`;
     qh += room.showAnswer ? `<div class="q-ans">${esc(qs[qi].a || "(정답 입력 안 함)")}</div>` : "";
+  } else {
+    qh = `<div class="q-num">${room.oralNo || 1}번</div>`;
   }
   $("#qBox").innerHTML = qh;
   const bank = qi >= 0 && !!qs[qi];
@@ -774,14 +784,14 @@ $("#gSave").onclick = () => {
 };
 $("#gReset").onclick = async () => {
   $("#gDlg").close();
-  if (!await ask("모든 모둠 점수를 0으로 만들까요?")) return;
-  const u = {}; gids().forEach(g => u[`groups/${g}/score`] = 0);
+  if (!await ask("모든 모둠 점수를 0으로 만들까요? 말로 내는 문제 번호도 1번부터 다시 세요.")) return;
+  const u = { oralNo: 1 }; gids().forEach(g => u[`groups/${g}/score`] = 0);
   roomRef.update(u).then(() => toast("점수를 0으로 만들었어요")).catch(fail);
   $("#gDlg").close();
 };
 $("#gNewRoom").onclick = async () => {
   $("#gDlg").close();
-  if (!await ask("새 방을 만들까요? 입장 코드가 바뀌어요.")) return;
+  if (!await ask("새 방을 만들까요? 입장 코드가 바뀌고 점수와 준비한 문제가 모두 지워져요.")) return;
   try { const c = await createRoom(); plateKey = ""; enterRoom(c); toast(`새 입장 코드는 ${c}이에요`); } catch(e){ fail(e); }
 };
 
@@ -877,7 +887,7 @@ function renderTablet(){
   $("#bScore").textContent = me.score || 0;
 
   const qs = room.questions || [], qi = room.qi ?? -1;
-  $("#bQ").textContent = qi >= 0 && qs[qi] ? qs[qi].q : "";
+  $("#bQ").textContent = qi >= 0 && qs[qi] ? `${qi + 1}번. ${qs[qi].q}` : `${room.oralNo || 1}번`;
 
   const ph = room.phase, lr = room.lastResult, locked = (room.locked || {})[myGid];
   const r = ranking(), mine = r.findIndex(x => x.g === myGid);
