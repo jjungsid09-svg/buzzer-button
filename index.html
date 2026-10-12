@@ -1,0 +1,881 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>우리 반 퀴즈 버저</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Black+Han+Sans&family=Noto+Sans+KR:wght@400;500;700;900&display=swap" rel="stylesheet">
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+<style>
+:root{
+  --stage:#1B2675; --stage2:#121A57; --stage3:#26339A;
+  --line:rgba(255,255,255,.16); --soft:rgba(255,255,255,.72);
+  --gold:#FFC93C; --ok:#2EC27E; --no:#FF4D5E;
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{
+  color:#fff; font-family:'Noto Sans KR',system-ui,-apple-system,sans-serif;
+  background:var(--stage2);
+  background-image:radial-gradient(ellipse 90% 60% at 50% -5%, var(--stage3) 0%, var(--stage) 45%, var(--stage2) 100%);
+  background-attachment:fixed;
+  padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
+  -webkit-tap-highlight-color:transparent;
+}
+.display{font-family:'Black Han Sans','Noto Sans KR',sans-serif;font-weight:400;letter-spacing:-.01em}
+button,input,select{font:inherit;color:inherit}
+button{cursor:pointer;border:0;background:none}
+button:disabled{cursor:default;opacity:.35}
+:focus-visible{outline:3px solid var(--gold);outline-offset:3px}
+[hidden]{display:none!important}
+.screen{min-height:100vh;min-height:100dvh;display:flex;flex-direction:column}
+.center{align-items:center;justify-content:center;padding:24px;text-align:center}
+.btn{padding:12px 20px;border-radius:14px;background:rgba(255,255,255,.12);font-weight:700;transition:background .15s}
+.btn:hover:not(:disabled){background:rgba(255,255,255,.2)}
+.btn.gold{background:var(--gold);color:var(--stage2)}
+.btn.gold:hover:not(:disabled){background:#FFD666}
+.btn.small{padding:8px 14px;font-size:.9rem;border-radius:10px}
+kbd{font-family:inherit;font-size:.8em;padding:1px 7px;border-radius:6px;border:1px solid var(--line);background:rgba(255,255,255,.08)}
+
+/* 홈 */
+.logo{font-size:clamp(3.2rem,11vw,6.5rem);line-height:1;margin:0 0 8px;color:var(--gold);text-shadow:0 6px 0 #C48A00}
+.tag{color:var(--soft);margin:0 0 40px}
+.choices{display:flex;gap:16px;flex-wrap:wrap;justify-content:center}
+.choice{width:250px;padding:28px 20px;border-radius:24px;background:rgba(255,255,255,.08);border:2px solid var(--line);text-align:center;transition:transform .15s,border-color .15s}
+.choice:hover{transform:translateY(-3px);border-color:var(--gold)}
+.choice .display{font-size:2rem;display:block;margin-bottom:6px}
+.choice small{color:var(--soft);font-size:.95rem}
+
+/* 설정 안내 */
+.setup-box{max-width:560px;text-align:left;background:rgba(255,255,255,.08);border-radius:20px;padding:24px 28px;line-height:1.7}
+.setup-box code{background:rgba(0,0,0,.3);padding:1px 6px;border-radius:5px}
+
+/* 진행 화면 */
+.t-head{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:16px 28px;border-bottom:1px solid var(--line)}
+.t-title{font-size:1.6rem;color:var(--gold)}
+.t-code{display:flex;align-items:baseline;gap:10px}
+.t-code span{color:var(--soft);font-size:.95rem}
+.t-code b{font-family:'Black Han Sans',sans-serif;font-weight:400;font-size:2.4rem;letter-spacing:.12em;color:var(--gold)}
+.t-tools{display:flex;gap:8px}
+.t-main{flex:1;display:grid;grid-template-rows:auto 1fr;gap:12px;padding:20px 28px;min-height:0}
+.q-box{text-align:center;max-width:1100px;margin:0 auto;width:100%}
+.q-num{color:var(--soft);font-weight:700;font-size:clamp(1rem,1.6vw,1.4rem);margin-bottom:8px}
+.q-text{font-size:clamp(2.4rem,5.6vw,5.4rem);font-weight:900;line-height:1.28;word-break:keep-all;letter-spacing:-.01em}
+.q-ans{display:inline-block;margin-top:18px;padding:8px 28px;border-radius:18px;background:var(--gold);color:var(--stage2);font-size:clamp(1.8rem,4vw,3.6rem);font-weight:900}
+.q-oral{color:var(--soft);font-size:1.15rem}
+.auto{display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:12px;background:rgba(0,0,0,.25);font-weight:700;font-size:.92rem;color:var(--soft)}
+.auto .sw2{width:34px;height:20px;border-radius:999px;background:rgba(255,255,255,.25);position:relative;transition:background .2s}
+.auto .sw2::after{content:"";position:absolute;left:3px;top:3px;width:14px;height:14px;border-radius:50%;background:#fff;transition:transform .2s}
+.auto.on{color:#fff}
+.auto.on .sw2{background:var(--ok)}
+.auto.on .sw2::after{transform:translateX(14px)}
+.countdown{display:block;margin-top:8px;font-size:1rem;color:var(--gold)}
+.seg{display:flex;background:rgba(0,0,0,.25);border-radius:12px;padding:4px}
+.seg button{padding:8px 14px;border-radius:9px;font-weight:700;font-size:.92rem;color:var(--soft)}
+.seg button.on{background:#fff;color:var(--stage2)}
+.t-main.bank .plate-wrap{min-height:200px}
+.t-main.bank .state .big{font-size:clamp(2.2rem,5vw,4rem)}
+.t-main.bank .winner .w-name{font-size:clamp(3rem,8vw,6.5rem)}
+.t-main.bank .result .display{font-size:clamp(2.6rem,6vw,5rem)}
+.plate-wrap{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;min-height:260px}
+.state{text-align:center}
+.state .big{font-size:clamp(3rem,8vw,6.5rem);line-height:1}
+.state p{color:var(--soft);font-size:1.15rem;margin:14px 0 0}
+.state.open .big{color:var(--gold);animation:breathe 1s ease-in-out infinite alternate}
+@keyframes breathe{from{transform:scale(1)}to{transform:scale(1.05)}}
+.winner{background:var(--c);color:#fff;border-radius:32px;padding:22px 64px 30px;text-align:center;box-shadow:0 14px 0 rgba(0,0,0,.25),0 0 0 8px rgba(255,255,255,.12)}
+.winner .w-label{font-weight:900;font-size:1.3rem;opacity:.9}
+.winner .w-name{font-size:clamp(4rem,11vw,9rem);line-height:1;text-shadow:0 5px 0 rgba(0,0,0,.2)}
+.result{text-align:center}
+.result .display{font-size:clamp(3.4rem,9vw,7.5rem);line-height:1}
+.result.ok .display{color:var(--ok)}
+.result.no .display{color:var(--no)}
+.result p{color:var(--soft);font-size:1.2rem;margin:12px 0 0}
+.pop{animation:pop .45s cubic-bezier(.2,1.6,.4,1)}
+@keyframes pop{from{transform:scale(.4);opacity:0}to{transform:scale(1);opacity:1}}
+.others{list-style:none;padding:0;margin:0;display:flex;gap:18px;flex-wrap:wrap;justify-content:center;color:var(--soft);font-weight:700}
+.others em{font-style:normal;font-weight:400;opacity:.8}
+.dot{display:inline-block;width:12px;height:12px;border-radius:50%;margin-right:6px;vertical-align:middle}
+.controls{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;padding:6px 28px 16px}
+.ctl{min-width:130px;padding:14px 18px;border-radius:16px;font-weight:900;font-size:1.1rem;background:rgba(255,255,255,.12);display:flex;flex-direction:column;align-items:center;gap:4px}
+.ctl kbd{font-weight:400}
+.ctl.open{background:var(--gold);color:var(--stage2)}
+.ctl.ok{background:var(--ok)}
+.ctl.no{background:var(--no)}
+.board{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;padding:0 28px 22px}
+.team{position:relative;border-radius:18px;padding:12px 14px 10px;background:var(--c);box-shadow:inset 0 -6px 0 rgba(0,0,0,.18);transition:opacity .2s,filter .2s}
+.team.locked{filter:grayscale(.9);opacity:.5}
+.team.lead{box-shadow:inset 0 -6px 0 rgba(0,0,0,.18),0 0 0 4px var(--gold)}
+.team .nm{font-weight:900;font-size:1.05rem;display:flex;align-items:center;gap:6px}
+.team .sc{font-family:'Black Han Sans',sans-serif;font-size:2.8rem;line-height:1.05}
+.team .on{width:10px;height:10px;border-radius:50%;background:rgba(0,0,0,.3)}
+.team .on.y{background:#fff;box-shadow:0 0 6px #fff}
+.team .adj{position:absolute;right:8px;bottom:8px;display:flex;gap:4px}
+.team .adj button{width:30px;height:30px;border-radius:8px;background:rgba(0,0,0,.2);font-weight:900}
+.hint{text-align:center;color:var(--soft);font-size:.85rem;padding-bottom:12px}
+
+/* 대화상자 */
+dialog{border:0;border-radius:22px;padding:0;width:min(640px,94vw);max-height:88vh;background:#fff;color:#1B2675}
+dialog::backdrop{background:rgba(10,14,50,.6)}
+.dlg{padding:24px 26px;display:flex;flex-direction:column;gap:16px;max-height:88vh}
+.dlg h2{margin:0;font-family:'Black Han Sans',sans-serif;font-weight:400;font-size:1.7rem}
+.dlg .scroll{overflow:auto;display:flex;flex-direction:column;gap:8px;min-height:0}
+.dlg .row{display:flex;gap:8px;align-items:center}
+.dlg input,.dlg select{border:2px solid #D6DBF5;border-radius:10px;padding:9px 12px;background:#fff;color:#1B2675;min-width:0}
+.dlg input:focus{border-color:#1B2675;outline:none}
+.dlg .sw{width:26px;height:26px;border-radius:8px;flex:none}
+.dlg .btn{background:#EEF0FB;color:#1B2675}
+.dlg .btn.gold{background:#1B2675;color:#fff}
+.dlg .btn.danger{background:#FFE4E7;color:#C51B32}
+.dlg .foot{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}
+.dlg .note{font-size:.9rem;color:#5A64A8;margin:0}
+.qrow .qn{width:28px;text-align:right;color:#8A92C9;font-weight:700;flex:none}
+.qrow .q{flex:2}.qrow .a{flex:1}
+.qrow .x{flex:none;width:34px;height:34px;border-radius:8px;background:#F3F4FB;color:#8A92C9;font-weight:900}
+
+/* 모둠 태블릿 */
+.code-in{font-family:'Black Han Sans',sans-serif;font-size:3rem;letter-spacing:.3em;text-align:center;width:260px;padding:12px 0 12px .3em;border-radius:18px;border:3px solid var(--line);background:rgba(255,255,255,.08);color:var(--gold)}
+.code-in:focus{border-color:var(--gold);outline:none}
+.pick-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px;width:min(720px,100%)}
+.pick{background:var(--c);border-radius:22px;padding:26px 10px;font-family:'Black Han Sans',sans-serif;font-size:2rem;box-shadow:inset 0 -8px 0 rgba(0,0,0,.2)}
+.pick small{display:block;font-family:'Noto Sans KR',sans-serif;font-size:.85rem;opacity:.85;margin-top:4px}
+.b-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 20px}
+.chip{background:var(--c);border-radius:999px;padding:8px 18px;font-family:'Black Han Sans',sans-serif;font-size:1.4rem}
+.b-score{font-weight:900;font-size:1.2rem}
+.b-score b{font-family:'Black Han Sans',sans-serif;font-weight:400;font-size:1.8rem;color:var(--gold);margin-left:4px}
+.b-q{text-align:center;padding:0 24px;font-weight:900;font-size:1.6rem;line-height:1.45;word-break:keep-all;min-height:1.5em}
+.b-main{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:34px;padding:12px 20px 30px}
+.buzzer{
+  width:min(74vw,54vh);aspect-ratio:1;border-radius:50%;
+  background:radial-gradient(circle at 50% 35%, rgba(255,255,255,.28), transparent 55%), var(--c);
+  box-shadow:0 18px 0 var(--cd),0 30px 50px rgba(0,0,0,.4),inset 0 -12px 0 rgba(0,0,0,.12);
+  display:flex;align-items:center;justify-content:center;
+  font-family:'Black Han Sans',sans-serif;font-size:clamp(2.6rem,11vw,5rem);color:#fff;text-shadow:0 4px 0 rgba(0,0,0,.2);
+  transition:transform .06s,box-shadow .06s,filter .25s;touch-action:manipulation;user-select:none;-webkit-user-select:none;
+}
+.buzzer.down,.buzzer.pressed,.buzzer.win{transform:translateY(14px);box-shadow:0 4px 0 var(--cd),0 10px 20px rgba(0,0,0,.4),inset 0 -12px 0 rgba(0,0,0,.12)}
+.buzzer.off{filter:grayscale(.85) brightness(.6)}
+.buzzer.live{animation:ready .8s ease-in-out infinite alternate}
+@keyframes ready{to{box-shadow:0 18px 0 var(--cd),0 30px 50px rgba(0,0,0,.4),0 0 0 18px rgba(255,255,255,.18),inset 0 -12px 0 rgba(0,0,0,.12)}}
+.buzzer.win{animation:winglow .5s ease-in-out infinite alternate}
+@keyframes winglow{to{filter:brightness(1.18)}}
+.b-sub{font-size:1.3rem;font-weight:700;color:var(--soft);text-align:center;min-height:1.6em;margin:0}
+.toast{position:fixed;left:50%;bottom:calc(24px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:#fff;color:var(--stage2);font-weight:700;padding:12px 20px;border-radius:14px;box-shadow:0 10px 30px rgba(0,0,0,.3);z-index:50;max-width:90vw;text-align:center}
+/* 미리보기 */
+body.preview{display:grid;grid-template-columns:minmax(0,1fr) 400px}
+.phone-col{position:sticky;top:0;height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:16px;border-left:1px solid var(--line);background:rgba(0,0,0,.2)}
+.pv-bar{display:flex;flex-direction:column;align-items:center;gap:6px;font-size:.92rem}
+.pv-bar label{color:var(--soft);display:flex;gap:6px;align-items:center;cursor:pointer}
+.pv-note{font-size:.8rem;color:var(--soft);max-width:320px;text-align:center;margin:0;line-height:1.5}
+.phone{width:340px;height:min(640px,74vh);border-radius:38px;border:10px solid #0B1040;overflow:hidden;position:relative;
+  background:radial-gradient(ellipse 90% 60% at 50% -5%, var(--stage3) 0%, var(--stage) 45%, var(--stage2) 100%);box-shadow:0 20px 50px rgba(0,0,0,.4)}
+.phone .screen{min-height:100%;height:100%;overflow:auto}
+.phone h1{font-size:1.6rem!important}
+.phone .pick-grid{grid-template-columns:1fr 1fr;gap:10px}
+.phone .pick{font-size:1.4rem;padding:16px 6px}
+.phone .pick small{font-size:.72rem}
+.phone .b-main{gap:26px}
+.phone .buzzer{width:min(230px,30vh);font-size:2.6rem}
+.phone .b-q{font-size:1.2rem}
+.phone .b-sub{font-size:1.05rem}
+.phone .chip{font-size:1.15rem}
+@media (max-width:1000px){body.preview{grid-template-columns:1fr}.phone-col{position:static;height:auto;border-left:0;border-top:1px solid var(--line);padding:28px 16px}}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+@media (max-width:700px){.t-head{flex-wrap:wrap;padding:12px 16px}.t-main,.board,.controls{padding-left:16px;padding-right:16px}.ctl{min-width:0;flex:1}}
+</style>
+</head>
+<body>
+
+<!-- Firebase 설정이 비어 있을 때 -->
+<section id="setup" class="screen center" hidden>
+  <div class="setup-box">
+    <h2 class="display" style="margin-top:0;color:var(--gold);font-size:1.8rem">Firebase 연결이 필요해요</h2>
+    <p>이 파일 안의 <code>firebaseConfig</code> 부분에 Firebase 프로젝트 설정값을 붙여넣고, GitHub Pages에 올려서 열어주세요.</p>
+    <p>Realtime Database 규칙에서 <code>quizbuzzer</code> 경로의 읽기·쓰기를 허용해야 버저가 연결돼요.</p>
+  </div>
+</section>
+
+<!-- 첫 화면 -->
+<section id="home" class="screen center" hidden>
+  <h1 class="logo display">퀴즈 버저</h1>
+  <p class="tag">먼저 누른 모둠이 답하는 우리 반 퀴즈쇼</p>
+  <div class="choices">
+    <button class="choice" id="goTeacher"><span class="display">진행 화면</span><small>선생님 컴퓨터·TV에서 열어요</small></button>
+    <button class="choice" id="goTablet"><span class="display">모둠 버저</span><small>모둠 태블릿에서 열어요</small></button>
+  </div>
+</section>
+
+<!-- 진행 화면 -->
+<section id="teacher" class="screen" hidden>
+  <header class="t-head">
+    <div class="t-title display">퀴즈 버저</div>
+    <div class="t-code"><span>입장 코드</span><b id="tCode">----</b></div>
+    <div class="seg" role="group" aria-label="문제 내는 방식">
+      <button id="mBank">준비한 문제</button><button id="mOral">말로 내기</button>
+    </div>
+    <button class="auto" id="autoBtn" aria-pressed="false"><span class="sw2"></span>정답 후 자동 넘김</button>
+    <div class="t-tools">
+      <button class="btn small" id="openQ">문제 준비</button>
+      <button class="btn small" id="openG">모둠 설정</button>
+    </div>
+  </header>
+  <main class="t-main">
+    <div class="q-box" id="qBox"></div>
+    <div class="plate-wrap"><div id="plate"></div><ul class="others" id="others"></ul></div>
+  </main>
+  <div class="controls">
+    <button class="ctl open" id="cOpen">버저 열기<kbd>스페이스바</kbd></button>
+    <button class="ctl ok" id="cOk">정답 +1<kbd>O</kbd></button>
+    <button class="ctl no" id="cNo">땡<kbd>X</kbd></button>
+    <button class="ctl" id="cAns">정답 보기<kbd>A</kbd></button>
+    <button class="ctl" id="cNext">다음 문제<kbd>N</kbd></button>
+  </div>
+  <div class="board" id="board"></div>
+  <p class="hint">발표용 포인터: <b>아래 버튼</b> 버저 열기 → 정답 → 다음 문제 · <b>위 버튼</b> 땡 (답하는 모둠이 없을 땐 정답 보기)</p>
+</section>
+
+<!-- 모둠: 코드 입력 -->
+<section id="join" class="screen center" hidden>
+  <h1 class="display" style="font-size:2.6rem;margin:0 0 6px;color:var(--gold)">입장 코드</h1>
+  <p class="tag" style="margin-bottom:24px">진행 화면에 보이는 숫자 4개를 입력해요</p>
+  <input class="code-in" id="codeIn" inputmode="numeric" maxlength="4" autocomplete="off" aria-label="입장 코드">
+  <div style="margin-top:22px;display:flex;gap:10px">
+    <button class="btn" id="joinBack">처음으로</button>
+    <button class="btn gold" id="joinGo">입장하기</button>
+  </div>
+</section>
+
+<!-- 모둠: 모둠 고르기 -->
+<section id="pick" class="screen center" hidden>
+  <h1 class="display" style="font-size:2.4rem;margin:0 0 24px">우리 모둠을 골라요</h1>
+  <div class="pick-grid" id="pickGrid"></div>
+  <button class="btn" style="margin-top:24px" id="pickBack">코드 다시 입력</button>
+</section>
+
+<!-- 모둠: 버저 -->
+<section id="buzz" class="screen" hidden>
+  <header class="b-head">
+    <button class="chip" id="bChip" title="모둠 바꾸기"></button>
+    <div class="b-score">점수<b id="bScore">0</b></div>
+  </header>
+  <div class="b-q" id="bQ"></div>
+  <div class="b-main">
+    <button class="buzzer off" id="bBtn" aria-live="polite">기다려요</button>
+    <p class="b-sub" id="bSub"></p>
+  </div>
+</section>
+
+<!-- 모둠 설정 -->
+<dialog id="gDlg"><div class="dlg">
+  <h2>모둠 설정</h2>
+  <div class="row"><label for="gCount" style="font-weight:700">모둠 수</label><select id="gCount"></select></div>
+  <div class="scroll" id="gList"></div>
+  <p class="note">새 방을 만들면 입장 코드가 바뀌어서 태블릿에서 다시 입장해야 해요.</p>
+  <div class="foot">
+    <button class="btn danger" id="gNewRoom">새 방 만들기</button>
+    <button class="btn danger" id="gReset">점수 0으로</button>
+    <span style="flex:1"></span>
+    <button class="btn" id="gCancel">닫기</button>
+    <button class="btn gold" id="gSave">저장</button>
+  </div>
+</div></dialog>
+
+<!-- 문제 준비 -->
+<dialog id="qDlg"><div class="dlg">
+  <h2>문제 준비</h2>
+  <p class="note">정답 칸에서 Enter를 누르면 다음 문제 칸이 생겨요. 빈 칸은 저장하지 않아요.</p>
+  <div class="scroll" id="qList"></div>
+  <div class="foot">
+    <button class="btn" id="qAdd">문제 추가</button>
+    <button class="btn danger" id="qClear">모두 지우기</button>
+    <span style="flex:1"></span>
+    <button class="btn" id="qCancel">닫기</button>
+    <button class="btn gold" id="qSave">저장</button>
+  </div>
+</div></dialog>
+
+<dialog id="askDlg"><div class="dlg">
+  <p id="askMsg" style="margin:0;font-weight:700;font-size:1.15rem"></p>
+  <div class="foot"><button class="btn" id="askNo">취소</button><button class="btn gold" id="askYes">확인</button></div>
+</div></dialog>
+
+<div class="toast" id="toast" hidden></div>
+
+<script>
+/* ===== 여기에 Firebase 설정을 붙여넣으세요 ===== */
+const firebaseConfig = {
+  apiKey: "AIzaSyCDFFILr8N3gwkaN9kQx2m3lE5YhyGwtZI",
+  authDomain: "buzzer-button-7984b.firebaseapp.com",
+  databaseURL: "https://buzzer-button-7984b-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "buzzer-button-7984b",
+  storageBucket: "buzzer-button-7984b.firebasestorage.app",
+  messagingSenderId: "449241577818",
+  appId: "1:449241577818:web:5b96cd8b33f93abb87db63"
+};
+/* 데이터가 저장될 위치 (다른 앱과 같은 프로젝트를 써도 겹치지 않아요) */
+const ROOT = "quizbuzzer";
+/* ============================================== */
+
+/* Firebase 설정이 비어 있으면 이 화면 안에서만 도는 미리보기 모드로 실행 */
+/* GitHub Pages에 올렸을 때만 실제 Firebase에 연결 (주소 끝에 ?live를 붙이면 어디서든 실제 연결) */
+const PREVIEW = !firebaseConfig.databaseURL ||
+  (!location.hostname.endsWith("github.io") && !/[?&]live\b/.test(location.search));
+function makeFakeFirebase(){
+  const tree = {}; let listeners = []; let pending = false;
+  const parts = p => p.split("/").filter(Boolean);
+  const clone = v => v == null ? null : JSON.parse(JSON.stringify(v));
+  const sv = v => {
+    if (v && typeof v === "object") {
+      if (v[".sv"] === "timestamp") return Date.now();
+      const o = Array.isArray(v) ? [] : {}; for (const k in v) o[k] = sv(v[k]); return o;
+    }
+    return v;
+  };
+  const get = p => { let n = tree; for (const k of parts(p)) { if (n == null || typeof n !== "object") return null; n = n[k]; } return n ?? null; };
+  const put = (p, v) => {
+    const ks = parts(p); let n = tree;
+    for (let i = 0; i < ks.length - 1; i++) { if (n[ks[i]] == null || typeof n[ks[i]] !== "object") n[ks[i]] = {}; n = n[ks[i]]; }
+    const last = ks[ks.length - 1];
+    if (v == null) delete n[last]; else n[last] = clone(sv(v));
+  };
+  const snap = p => { const v = clone(get(p)); return { val: () => v, exists: () => v != null }; };
+  const fire = () => { pending = false; listeners.forEach(l => l.cb(snap(l.path))); };
+  const changed = () => { if (!pending) { pending = true; setTimeout(fire, 30 + Math.random() * 50); } };
+  const ref = p => ({
+    child: c => ref(p + "/" + c),
+    on(ev, cb){ listeners.push({ path: p, cb }); setTimeout(() => cb(snap(p)), 0); return cb; },
+    off(){ listeners = listeners.filter(l => l.path !== p); },
+    once(){ return Promise.resolve(snap(p)); },
+    set(v){ put(p, v); changed(); return Promise.resolve(); },
+    update(o){ for (const k in o) put(p + "/" + k, o[k]); changed(); return Promise.resolve(); },
+    remove(){ put(p, null); changed(); return Promise.resolve(); },
+    transaction(fn){ const r = fn(clone(get(p))); if (r === undefined) return Promise.resolve({ committed: false }); put(p, r); changed(); return Promise.resolve({ committed: true }); },
+    onDisconnect(){ return { remove(){}, cancel(){} }; }
+  });
+  const database = () => ({ ref: p => ref(p || "") });
+  database.ServerValue = { TIMESTAMP: { ".sv": "timestamp" } };
+  return { initializeApp(){}, database };
+}
+if (PREVIEW) window.firebase = makeFakeFirebase();
+
+const COLORS = ["#FF4D5E","#FF9F1C","#2EC27E","#3B82F6","#A855F7","#EC4899","#14B8A6","#8B5E34"];
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const save = (k,v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch(e){} };
+const load = k => { try { return JSON.parse(localStorage.getItem(k)); } catch(e){ return null; } };
+const sessionId = Math.random().toString(36).slice(2, 10);
+
+let db, roomRef = null, room = null, code = null, role = null, myGid = null, offset = 0;
+let presenceRef = null;
+
+const TAB = ["join", "pick", "buzz"];
+function show(id){
+  document.querySelectorAll(".screen").forEach(s => {
+    const same = !PREVIEW || TAB.includes(id) === TAB.includes(s.id);
+    if (same) s.hidden = s.id !== id;
+  });
+}
+/* 확인 창 (미리보기 화면에서도 작동하도록 직접 만든 창) */
+function ask(msg){
+  return new Promise(res => {
+    const d = $("#askDlg"); $("#askMsg").textContent = msg;
+    $("#askYes").onclick = () => { d.close(); res(true); };
+    $("#askNo").onclick = () => { d.close(); res(false); };
+    d.oncancel = () => res(false);
+    d.showModal();
+  });
+}
+let toastT;
+function toast(msg){ const t = $("#toast"); t.textContent = msg; t.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => t.hidden = true, 2800); }
+function fail(e){ console.error(e); toast(String(e && e.code === "PERMISSION_DENIED" ? "Firebase 규칙에서 쓰기가 막혀 있어요" : "연결에 문제가 있어요. 인터넷을 확인해 주세요")); }
+
+function shade(hex, f){
+  const n = parseInt(hex.slice(1), 16);
+  const r = Math.round(((n >> 16) & 255) * f), g = Math.round(((n >> 8) & 255) * f), b = Math.round((n & 255) * f);
+  return `rgb(${r},${g},${b})`;
+}
+function gids(){ return Object.keys(room?.groups || {}).sort((a,b) => +a.slice(1) - +b.slice(1)); }
+function ranking(){
+  if (!room) return [];
+  const b = (room.buzzes || {})[room.attempt] || {}, locked = room.locked || {};
+  return Object.entries(b).filter(([g]) => !locked[g] && room.groups?.[g])
+    .map(([g, v]) => ({ g, t: v.t })).sort((x, y) => x.t - y.t);
+}
+
+/* ----- 소리 ----- */
+let actx = null;
+function unlockAudio(){ try { actx = actx || new (window.AudioContext || window.webkitAudioContext)(); if (actx.state === "suspended") actx.resume(); } catch(e){} }
+function tone(freq, start, dur, type = "square", vol = .18){
+  if (!actx) return;
+  const o = actx.createOscillator(), g = actx.createGain(), t = actx.currentTime + start;
+  o.type = type; o.frequency.value = freq;
+  g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(.001, t + dur);
+  o.connect(g).connect(actx.destination); o.start(t); o.stop(t + dur);
+}
+function sfx(kind){
+  if (kind === "buzz") { tone(880, 0, .12); tone(1175, .12, .3); }
+  if (kind === "ok") { [523, 659, 784, 1047].forEach((f, i) => tone(f, i * .09, .25, "triangle", .22)); }
+  if (kind === "no") { tone(140, 0, .55, "sawtooth", .2); }
+  if (kind === "tap") { tone(660, 0, .08, "square", .12); }
+  if (kind === "open") { tone(600, 0, .09, "triangle"); tone(900, .1, .14, "triangle"); }
+}
+
+/* ----- 시작 ----- */
+window.addEventListener("DOMContentLoaded", () => {
+  if (PREVIEW) { bindCommon(); bindTeacher(); initPreview(); return; }
+  firebase.initializeApp(firebaseConfig);
+  db = firebase.database();
+  db.ref(".info/serverTimeOffset").on("value", s => offset = s.val() || 0);
+  show("home");
+
+  $("#goTeacher").onclick = startTeacher;
+  $("#goTablet").onclick = () => { unlockAudio(); role = "tablet"; const t = load("qb_tablet"); if (t) $("#codeIn").value = t.code; show("join"); $("#codeIn").focus(); };
+  $("#joinBack").onclick = () => show("home");
+  $("#joinGo").onclick = joinRoom;
+  $("#codeIn").addEventListener("keydown", e => { if (e.key === "Enter") joinRoom(); });
+  $("#codeIn").addEventListener("input", e => e.target.value = e.target.value.replace(/\D/g, "").slice(0, 4));
+  $("#pickBack").onclick = () => { leaveRoom(); show("join"); };
+  bindCommon();
+  bindTeacher();
+});
+function bindCommon(){
+  $("#bChip").onclick = async () => { if (await ask("모둠을 다시 고를까요?")) { dropPresence(); myGid = null; show("pick"); renderPick(); } };
+  $("#bBtn").addEventListener("pointerdown", press);
+}
+
+/* ===================== 미리보기 ===================== */
+async function initPreview(){
+  document.body.classList.add("preview");
+  firebase.initializeApp(); db = firebase.database();
+  const col = document.createElement("aside");
+  col.className = "phone-col";
+  col.innerHTML = `<div class="pv-bar"><b>모둠 태블릿 미리보기</b><label><input type="checkbox" id="botToggle" checked> 다른 모둠도 자동으로 누르기</label></div>
+    <div class="phone" id="phone"></div>
+    <p class="pv-note">미리보기는 이 화면 안에서만 작동해요. 완성본은 Firebase로 여러 태블릿이 실제로 연결돼요.</p>`;
+  document.body.appendChild(col);
+  TAB.forEach(id => $("#phone").appendChild($("#" + id)));
+  $("#pickBack").hidden = true;
+  document.addEventListener("pointerdown", unlockAudio, { once: true });
+  role = "teacher";
+  const c = await createRoom();
+  enterRoom(c);
+  show("teacher"); show("pick");
+}
+let botAttempt = -1;
+function previewBots(){
+  if (!room || !$("#botToggle")?.checked) return;
+  if (room.phase !== "open" || botAttempt === room.attempt) return;
+  botAttempt = room.attempt;
+  const att = room.attempt, locked = room.locked || {};
+  gids().forEach(g => {
+    if (g === myGid || locked[g] || Math.random() < .25) return;
+    setTimeout(() => {
+      if (room && room.phase === "open" && room.attempt === att)
+        roomRef.child(`buzzes/${att}/${g}`).transaction(c => c ? undefined : { t: Date.now() });
+    }, 600 + Math.random() * 2200);
+  });
+}
+
+/* ===================== 진행 화면 ===================== */
+async function startTeacher(){
+  role = "teacher"; unlockAudio();
+  try {
+    let c = load("qb_teacher_code");
+    if (c) { const s = await db.ref(`${ROOT}/rooms/${c}`).once("value"); if (!s.exists()) c = null; }
+    if (!c) c = await createRoom();
+    enterRoom(c);
+    show("teacher");
+  } catch(e){ fail(e); }
+}
+function newRoomData(){
+  const groups = {};
+  for (let i = 1; i <= 6; i++) groups["g" + i] = { name: i + "모둠", color: COLORS[i - 1], score: 0 };
+  return { groups, phase: "idle", attempt: 0, qi: -1, showAnswer: false, createdAt: firebase.database.ServerValue.TIMESTAMP };
+}
+async function createRoom(){
+  for (let i = 0; i < 20; i++) {
+    const c = String(Math.floor(1000 + Math.random() * 9000));
+    const res = await db.ref(`${ROOT}/rooms/${c}`).transaction(cur => cur ? undefined : newRoomData());
+    if (res.committed) { save("qb_teacher_code", c); return c; }
+  }
+  throw new Error("room");
+}
+function enterRoom(c){
+  leaveRoom();
+  code = c; roomRef = db.ref(`${ROOT}/rooms/${c}`);
+  roomRef.on("value", s => {
+    room = s.val();
+    if (PREVIEW) { renderTeacher(); renderTablet(); previewBots(); }
+    else if (role === "teacher") renderTeacher();
+    else renderTablet();
+  }, fail);
+}
+function leaveRoom(){ dropPresence(); if (roomRef) roomRef.off(); roomRef = null; room = null; }
+
+let settleTimer = null, reopenTimer = null, soundedAttempt = -1, plateKey = "";
+
+function bindTeacher(){
+  $("#cOpen").onclick = openBuzzer;
+  $("#cOk").onclick = markCorrect;
+  $("#cNo").onclick = markWrong;
+  $("#cAns").onclick = () => roomRef && roomRef.update({ showAnswer: !room.showAnswer });
+  $("#cNext").onclick = nextQuestion;
+  $("#openG").onclick = openGroupDlg;
+  $("#mBank").onclick = () => {
+    if (!room) return;
+    if (!(room.questions || []).length) { toast("먼저 문제를 준비해 주세요"); openQDlg(); return; }
+    if ((room.qi ?? -1) < 0) setMode(0);
+  };
+  $("#autoBtn").onclick = () => {
+    if (!room) return;
+    const on = !room.autoNext;
+    roomRef.update({ autoNext: on }).catch(fail);
+    toast(on ? "정답이 나오면 4초 뒤 다음 문제로 넘어가요" : "다음 문제는 직접 넘겨요");
+    if (!on) clearTimeout(autoTimer);
+  };
+  $("#mOral").onclick = () => { if (room && (room.qi ?? -1) >= 0) setMode(-1); };
+  $("#openQ").onclick = openQDlg;
+  document.addEventListener("keydown", e => {
+    if (role !== "teacher" || $("#teacher").hidden || document.querySelector("dialog[open]")) return;
+    if (e.target.matches("input,select,textarea")) return;
+    const k = e.key.toLowerCase();
+    if (k === " ") { e.preventDefault(); openBuzzer(); }
+    else if (k === "o") markCorrect();
+    else if (k === "x") markWrong();
+    else if (k === "a") $("#cAns").click();
+    else if (k === "n") nextQuestion();
+    /* 발표용 포인터(리모컨): 아래/다음 버튼, 위/이전 버튼 */
+    else if (["pagedown", "arrowdown", "arrowright"].includes(k)) { e.preventDefault(); clickerNext(); }
+    else if (["pageup", "arrowup", "arrowleft"].includes(k)) { e.preventDefault(); clickerPrev(); }
+    else if (k === "b" || k === ".") { e.preventDefault(); clickerPrev(); }
+  });
+}
+
+function openBuzzer(){
+  if (!room || room.phase === "open" || room.phase === "buzzed") return;
+  const locked = room.locked || {};
+  if (!gids().some(g => !locked[g])) { toast("모든 모둠이 기회를 썼어요. 다음 문제로 넘어가 주세요"); return; }
+  clearTimeout(reopenTimer);
+  roomRef.update({ phase: "open", attempt: (room.attempt || 0) + 1, buzzes: null, lastResult: null }).catch(fail);
+  sfx("open");
+}
+function markCorrect(){
+  if (!room || room.phase !== "buzzed") return;
+  const w = ranking()[0]; if (!w) return;
+  roomRef.child(`groups/${w.g}/score`).transaction(s => (s || 0) + 1);
+  roomRef.update({ phase: "closed", lastResult: { g: w.g, type: "correct" }, showAnswer: true }).catch(fail);
+  sfx("ok");
+  scheduleAutoNext();
+}
+function markWrong(){
+  if (!room || room.phase !== "buzzed") return;
+  const w = ranking()[0]; if (!w) return;
+  const locked = { ...(room.locked || {}), [w.g]: true };
+  const left = gids().filter(g => !locked[g]);
+  /* 모든 모둠이 틀리면 정답을 보여줌 */
+  roomRef.update({ phase: "closed", locked, lastResult: { g: w.g, type: "wrong" }, ...(left.length ? {} : { showAnswer: true }) }).catch(fail);
+  if (!left.length) scheduleAutoNext();
+  sfx("no");
+  clearTimeout(reopenTimer);
+  if (left.length) {
+    const att = room.attempt;
+    reopenTimer = setTimeout(() => {
+      if (room && room.phase === "closed" && room.attempt === att && room.lastResult?.type === "wrong") {
+        roomRef.update({ phase: "open", attempt: att + 1, buzzes: null, lastResult: null });
+        sfx("open");
+      }
+    }, 1800);
+  }
+}
+function nextQuestion(){
+  if (!room) return;
+  clearTimeout(reopenTimer); clearTimeout(autoTimer);
+  const qs = room.questions || [];
+  let qi = room.qi ?? -1;
+  if (qi >= 0) {
+    if (qi + 1 < qs.length) qi++;
+    else { toast("준비한 문제를 다 냈어요. 말로 내기로 바뀌어요"); clearTimeout(autoTimer); qi = -1; }
+  }
+  roomRef.update({ qi, showAnswer: false, locked: null, buzzes: null, phase: "idle", lastResult: null }).catch(fail);
+}
+/* 포인터 아래 버튼: 지금 상황에서 할 일을 한 번에 */
+function clickerNext(){
+  if (!room) return;
+  const ph = room.phase, lr = room.lastResult, locked = room.locked || {};
+  const anyLeft = gids().some(g => !locked[g]);
+  if (ph === "idle") openBuzzer();
+  else if (ph === "buzzed") markCorrect();
+  else if (ph === "closed") {
+    if (lr?.type === "wrong" && anyLeft) openBuzzer();
+    else nextQuestion();
+  }
+}
+/* 포인터 위 버튼: 답한 모둠이 있으면 땡, 아니면 정답 보기 */
+function clickerPrev(){
+  if (!room) return;
+  if (room.phase === "buzzed") markWrong();
+  else if ((room.qi ?? -1) >= 0) $("#cAns").click();
+}
+function setMode(qi){
+  clearTimeout(reopenTimer); clearTimeout(autoTimer);
+  roomRef.update({ qi, showAnswer: false, locked: null, buzzes: null, phase: "idle", lastResult: null }).catch(fail);
+}
+/* 자동 다음 문제: 준비한 문제 모드에서만, 몇 초 뒤 넘어감 */
+let autoTimer = null;
+function scheduleAutoNext(){
+  clearTimeout(autoTimer);
+  if (!room || !room.autoNext) return;
+  const qi = room.qi, att = room.attempt;
+  autoTimer = setTimeout(() => {
+    if (room && room.qi === qi && room.attempt === att && room.phase === "closed") nextQuestion();
+  }, 4000);
+}
+function adjustScore(g, d){ roomRef.child(`groups/${g}/score`).transaction(s => Math.max(0, (s || 0) + d)); }
+
+function renderTeacher(){
+  if (!room) return;
+  $("#tCode").textContent = code;
+  const G = room.groups || {}, ph = room.phase, r = ranking(), lr = room.lastResult, locked = room.locked || {};
+
+  /* 먼저 누른 모둠이 생기면 잠깐 기다렸다가 확정 (통신 지연 보정) */
+  if (ph === "open" && r.length && !settleTimer) {
+    const att = room.attempt;
+    settleTimer = setTimeout(() => {
+      settleTimer = null;
+      roomRef.child("phase").transaction(p => (p === "open" && room.attempt === att) ? "buzzed" : undefined);
+    }, 450);
+  }
+  if (ph === "buzzed" && soundedAttempt !== room.attempt) { soundedAttempt = room.attempt; sfx("buzz"); }
+
+  /* 문제 */
+  const qs = room.questions || [], qi = room.qi ?? -1;
+  let qh = "";
+  if (qi >= 0 && qs[qi]) {
+    qh = `<div class="q-num">문제 ${qi + 1} / ${qs.length}</div><div class="q-text">${esc(qs[qi].q)}</div>`;
+    qh += room.showAnswer ? `<div class="q-ans">${esc(qs[qi].a || "(정답 입력 안 함)")}</div>` : "";
+  }
+  $("#qBox").innerHTML = qh;
+  const bank = qi >= 0 && !!qs[qi];
+  $(".t-main").classList.toggle("bank", bank);
+  $("#mBank").classList.toggle("on", bank);
+  $("#mOral").classList.toggle("on", !bank);
+  $("#autoBtn").classList.toggle("on", !!room.autoNext);
+  $("#autoBtn").setAttribute("aria-pressed", !!room.autoNext);
+
+  /* 가운데 판 */
+  const winner = ph === "buzzed" ? r[0] : null;
+  const key = [ph, room.attempt, winner?.g, lr?.g, lr?.type, !!room.autoNext].join("|");
+  if (key !== plateKey) {
+    plateKey = key;
+    let h;
+    if (winner) {
+      const w = G[winner.g];
+      h = `<div class="winner pop" style="--c:${w.color}"><div class="w-label">가장 먼저 눌렀어요</div><div class="w-name display">${esc(w.name)}</div></div>`;
+    } else if (ph === "open") {
+      const rest = gids().filter(g => locked[g]).map(g => G[g].name);
+      h = `<div class="state open"><div class="big display">버저 열림!</div><p>${rest.length ? "쉬는 모둠: " + rest.map(esc).join(", ") : "먼저 누르는 모둠이 답해요"}</p></div>`;
+    } else if (ph === "closed" && lr && G[lr.g]) {
+      const nm = esc(G[lr.g].name);
+      const cd = room.autoNext ? `<span class="countdown">잠시 뒤 다음 문제로 넘어가요</span>` : "";
+      if (lr.type === "correct") h = `<div class="result ok pop"><div class="display">${nm} 정답!</div><p>1점을 얻었어요${cd}</p></div>`;
+      else {
+        const left = gids().filter(g => !locked[g]).length;
+        h = `<div class="result no pop"><div class="display">${nm} 땡!</div><p>${left ? "다른 모둠에게 기회가 넘어가요" : "모든 모둠이 기회를 썼어요. 정답을 보고 다음 문제로 가요" + cd}</p></div>`;
+      }
+    } else {
+      h = `<div class="state"><div class="big display">준비</div><p>문제를 내고 <kbd>스페이스바</kbd>로 버저를 열어요</p></div>`;
+    }
+    $("#plate").innerHTML = h;
+  }
+  $("#others").innerHTML = winner ? r.slice(1).map((x, i) =>
+    `<li><span class="dot" style="background:${G[x.g].color}"></span>${i + 2}등 ${esc(G[x.g].name)} <em>+${((x.t - r[0].t) / 1000).toFixed(2)}초</em></li>`).join("") : "";
+
+  /* 버튼 */
+  const anyLeft = gids().some(g => !locked[g]);
+  $("#cOpen").disabled = ph === "open" || ph === "buzzed" || !anyLeft;
+  $("#cOk").disabled = $("#cNo").disabled = ph !== "buzzed";
+  $("#cAns").disabled = !(qi >= 0 && qs[qi]);
+  $("#cAns").firstChild.textContent = room.showAnswer ? "정답 숨기기" : "정답 보기";
+
+  /* 점수판 */
+  const top = Math.max(0, ...gids().map(g => G[g].score || 0));
+  const online = room.online || {};
+  $("#board").innerHTML = gids().map(g => {
+    const x = G[g], on = online[g] && Object.keys(online[g]).length;
+    return `<div class="team ${locked[g] ? "locked" : ""} ${top > 0 && (x.score || 0) === top ? "lead" : ""}" style="--c:${x.color}">
+      <div class="nm"><span class="on ${on ? "y" : ""}" title="${on ? "태블릿 연결됨" : "연결 안 됨"}"></span>${esc(x.name)}</div>
+      <div class="sc">${x.score || 0}</div>
+      <div class="adj"><button data-g="${g}" data-d="-1" aria-label="${esc(x.name)} 1점 빼기">−</button><button data-g="${g}" data-d="1" aria-label="${esc(x.name)} 1점 더하기">+</button></div>
+    </div>`;
+  }).join("");
+  $("#board").querySelectorAll("[data-g]").forEach(b => b.onclick = () => adjustScore(b.dataset.g, +b.dataset.d));
+}
+
+/* ----- 모둠 설정 ----- */
+let draftGroups = [];
+function openGroupDlg(){
+  draftGroups = gids().map(g => ({ ...room.groups[g] }));
+  const sel = $("#gCount");
+  sel.innerHTML = [2,3,4,5,6,7,8].map(n => `<option ${n === draftGroups.length ? "selected" : ""}>${n}</option>`).join("");
+  sel.onchange = () => {
+    const n = +sel.value; syncDraftNames();
+    while (draftGroups.length < n) { const i = draftGroups.length; draftGroups.push({ name: (i + 1) + "모둠", color: COLORS[i], score: 0 }); }
+    draftGroups.length = n; drawGroupList();
+  };
+  drawGroupList();
+  $("#gDlg").showModal();
+}
+function drawGroupList(){
+  $("#gList").innerHTML = draftGroups.map((x, i) =>
+    `<div class="row"><span class="sw" style="background:${x.color}"></span><input data-i="${i}" value="${esc(x.name)}" maxlength="10" style="flex:1" aria-label="${i + 1}번째 모둠 이름"></div>`).join("");
+}
+function syncDraftNames(){ $("#gList").querySelectorAll("input").forEach(inp => draftGroups[+inp.dataset.i].name = inp.value.trim() || (+inp.dataset.i + 1) + "모둠"); }
+$("#gCancel").onclick = () => $("#gDlg").close();
+$("#gSave").onclick = () => {
+  syncDraftNames();
+  const groups = {};
+  draftGroups.forEach((x, i) => groups["g" + (i + 1)] = { name: x.name, color: COLORS[i], score: x.score || 0 });
+  roomRef.update({ groups, buzzes: null, locked: null, phase: "idle", lastResult: null }).then(() => toast("모둠 설정을 저장했어요")).catch(fail);
+  $("#gDlg").close();
+};
+$("#gReset").onclick = async () => {
+  $("#gDlg").close();
+  if (!await ask("모든 모둠 점수를 0으로 만들까요?")) return;
+  const u = {}; gids().forEach(g => u[`groups/${g}/score`] = 0);
+  roomRef.update(u).then(() => toast("점수를 0으로 만들었어요")).catch(fail);
+  $("#gDlg").close();
+};
+$("#gNewRoom").onclick = async () => {
+  $("#gDlg").close();
+  if (!await ask("새 방을 만들까요? 입장 코드가 바뀌어요.")) return;
+  try { const c = await createRoom(); plateKey = ""; enterRoom(c); toast(`새 입장 코드는 ${c}이에요`); } catch(e){ fail(e); }
+};
+
+/* ----- 문제 준비 ----- */
+function openQDlg(){
+  const qs = room.questions || [];
+  $("#qList").innerHTML = "";
+  (qs.length ? qs : [{ q: "", a: "" }]).forEach(x => addQRow(x.q, x.a));
+  $("#qDlg").showModal();
+}
+function addQRow(q = "", a = "", focus = false){
+  const row = document.createElement("div");
+  row.className = "row qrow";
+  row.innerHTML = `<span class="qn"></span><input class="q" placeholder="문제" value="${esc(q)}"><input class="a" placeholder="정답" value="${esc(a)}"><button class="x" aria-label="이 문제 지우기">×</button>`;
+  row.querySelector(".x").onclick = () => { row.remove(); numberQ(); };
+  row.querySelector(".a").addEventListener("keydown", e => { if (e.key === "Enter" && !e.isComposing) { e.preventDefault(); addQRow("", "", true); } });
+  $("#qList").appendChild(row); numberQ();
+  if (focus) { row.querySelector(".q").focus(); row.scrollIntoView({ block: "nearest" }); }
+}
+function numberQ(){ $("#qList").querySelectorAll(".qn").forEach((s, i) => s.textContent = i + 1); }
+$("#qAdd").onclick = () => addQRow("", "", true);
+$("#qClear").onclick = async () => { $("#qDlg").close(); if (await ask("문제를 모두 지울까요?")) { $("#qList").innerHTML = ""; addQRow(); } $("#qDlg").showModal(); };
+$("#qCancel").onclick = () => $("#qDlg").close();
+$("#qSave").onclick = () => {
+  const arr = [...$("#qList").querySelectorAll(".qrow")]
+    .map(r => ({ q: r.querySelector(".q").value.trim(), a: r.querySelector(".a").value.trim() }))
+    .filter(x => x.q);
+  let qi = room.qi ?? -1;
+  if (!arr.length) qi = -1; else if (qi >= arr.length) qi = arr.length - 1;
+  roomRef.update({ questions: arr.length ? arr : null, qi }).then(() => toast(`문제 ${arr.length}개를 저장했어요`)).catch(fail);
+  $("#qDlg").close();
+};
+
+/* ===================== 모둠 태블릿 ===================== */
+async function joinRoom(){
+  const c = $("#codeIn").value.trim();
+  if (!/^\d{4}$/.test(c)) { toast("숫자 4개를 입력해 주세요"); return; }
+  try {
+    const s = await db.ref(`${ROOT}/rooms/${c}`).once("value");
+    if (!s.exists()) { toast("그런 방이 없어요. 진행 화면의 코드를 다시 확인해 주세요"); return; }
+    role = "tablet";
+    enterRoom(c);
+    const t = load("qb_tablet");
+    if (t && t.code === c && s.val().groups?.[t.gid]) choose(t.gid);
+    else { myGid = null; room = room || s.val(); show("pick"); renderPick(); }
+  } catch(e){ fail(e); }
+}
+function renderPick(){
+  if (!room) return;
+  const online = room.online || {};
+  $("#pickGrid").innerHTML = gids().map(g => {
+    const n = online[g] ? Object.keys(online[g]).length : 0;
+    return `<button class="pick" style="--c:${room.groups[g].color}" data-g="${g}">${esc(room.groups[g].name)}<small>${n ? "태블릿 " + n + "대 연결됨" : "아직 아무도 없어요"}</small></button>`;
+  }).join("");
+  $("#pickGrid").querySelectorAll("[data-g]").forEach(b => b.onclick = () => choose(b.dataset.g));
+}
+function choose(g){
+  myGid = g;
+  save("qb_tablet", { code, gid: g });
+  dropPresence();
+  presenceRef = roomRef.child(`online/${g}/${sessionId}`);
+  presenceRef.set(true); presenceRef.onDisconnect().remove();
+  show("buzz");
+  renderTablet();
+}
+function dropPresence(){ if (presenceRef) { presenceRef.onDisconnect().cancel(); presenceRef.remove(); presenceRef = null; } }
+
+let pressedAttempt = -1, winSoundAttempt = -1;
+function press(e){
+  e.preventDefault();
+  if (!room || !myGid) return;
+  if (room.phase !== "open" || (room.locked || {})[myGid] || pressedAttempt === room.attempt) return;
+  const att = room.attempt;
+  pressedAttempt = att;
+  const btn = $("#bBtn"); btn.classList.add("down");
+  sfx("tap"); if (navigator.vibrate) navigator.vibrate(60);
+  roomRef.child(`buzzes/${att}/${myGid}`).transaction(cur => cur ? undefined : { t: Date.now() + offset }).catch(fail);
+}
+
+function renderTablet(){
+  if (role !== "tablet" && !PREVIEW) return;
+  if (!room) { toast("방이 닫혔어요. 코드를 다시 입력해 주세요"); show("join"); return; }
+  if (!$("#pick").hidden) { renderPick(); return; }
+  if (!myGid) return;
+  const G = room.groups || {}, me = G[myGid];
+  if (!me) { myGid = null; show("pick"); renderPick(); return; }
+
+  document.body.style.setProperty("--c", me.color);
+  const btn = $("#bBtn");
+  btn.style.setProperty("--c", me.color); btn.style.setProperty("--cd", shade(me.color, .62));
+  $("#bChip").style.setProperty("--c", me.color);
+  $("#bChip").textContent = me.name;
+  $("#bScore").textContent = me.score || 0;
+
+  const qs = room.questions || [], qi = room.qi ?? -1;
+  $("#bQ").textContent = qi >= 0 && qs[qi] ? qs[qi].q : "";
+
+  const ph = room.phase, lr = room.lastResult, locked = (room.locked || {})[myGid];
+  const r = ranking(), mine = r.findIndex(x => x.g === myGid);
+  let cls = "off", txt = "기다려요", sub = "선생님이 버저를 열면 눌러요";
+
+  if (ph === "closed" && lr && G[lr.g]) {
+    if (lr.g === myGid) {
+      txt = lr.type === "correct" ? "정답!" : "땡!";
+      sub = lr.type === "correct" ? "1점을 얻었어요" : "이번 문제는 다른 모둠 차례예요";
+      cls = lr.type === "correct" ? "win" : "off";
+    } else {
+      sub = `${G[lr.g].name} ${lr.type === "correct" ? "정답!" : "땡!"}`;
+      if (locked) txt = "쉬어요";
+    }
+  } else if (locked) {
+    txt = "쉬어요"; sub = "이번 문제는 기회를 썼어요";
+  } else if (ph === "open") {
+    if (mine >= 0 || pressedAttempt === room.attempt) { cls = "pressed"; txt = mine >= 0 ? (mine + 1) + "등" : "눌렀어요"; sub = "결과를 기다려요"; }
+    else { cls = "live"; txt = "누르기!"; sub = "먼저 누르는 모둠이 답해요"; }
+  } else if (ph === "buzzed") {
+    if (mine === 0) {
+      cls = "win"; txt = "1등!"; sub = "우리 차례예요. 답을 말해요";
+      if (winSoundAttempt !== room.attempt) { winSoundAttempt = room.attempt; sfx("buzz"); if (navigator.vibrate) navigator.vibrate([80, 60, 80]); }
+    } else if (mine > 0) { cls = "pressed"; txt = (mine + 1) + "등"; sub = "아깝다! 다음 기회를 노려요"; }
+    else { txt = "늦었어요"; sub = r[0] ? `먼저 누른 모둠: ${G[r[0].g].name}` : ""; }
+  }
+  btn.className = "buzzer " + cls;
+  btn.textContent = txt;
+  $("#bSub").textContent = sub;
+}
+</script>
+</body>
+</html>
