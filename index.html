@@ -448,6 +448,14 @@ window.addEventListener("DOMContentLoaded", () => {
   db = firebase.database();
   db.ref(".info/serverTimeOffset").on("value", s => offset = s.val() || 0);
   show("home");
+  db.ref(".info/connected").on("value", s => { if (s.val()) markOnline(); });
+
+  /* 같은 태블릿에서 다시 열면 (3시간 안) 원래 모둠으로 바로 들어가기 */
+  const last = load("qb_tablet");
+  if (last && last.code && Date.now() - (last.at || 0) < 3 * 60 * 60 * 1000) {
+    unlockAudio(); role = "tablet"; $("#codeIn").value = last.code;
+    show("join"); joinRoom();
+  }
 
   $("#goTeacher").onclick = () => { if (unlocked()) startTeacher(); else { show("lock"); $("#pwIn").focus(); } };
   $("#goTablet").onclick = () => { unlockAudio(); role = "tablet"; const t = load("qb_tablet"); if (t) $("#codeIn").value = t.code; show("join"); $("#codeIn").focus(); };
@@ -546,13 +554,14 @@ function enterRoom(c){
   leaveRoom();
   code = c; roomRef = db.ref(`${ROOT}/rooms/${c}`);
   roomRef.on("value", s => {
-    room = s.val();
+    room = s.val(); roomLoaded = true;
     if (PREVIEW) { renderTeacher(); renderTablet(); previewBots(); }
     else if (role === "teacher") renderTeacher();
     else renderTablet();
   }, fail);
 }
-function leaveRoom(){ dropPresence(); if (roomRef) roomRef.off(); roomRef = null; room = null; }
+let roomLoaded = false;
+function leaveRoom(){ dropPresence(); if (roomRef) roomRef.off(); roomRef = null; room = null; roomLoaded = false; }
 
 let settleTimer = null, reopenTimer = null, soundedAttempt = -1, plateKey = "";
 
@@ -834,6 +843,7 @@ async function joinRoom(){
     if (!s.exists()) { toast("그런 방이 없어요. 진행 화면의 코드를 다시 확인해 주세요"); return; }
     role = "tablet";
     enterRoom(c);
+    room = s.val();   /* 방 정보를 바로 채워서 화면이 비지 않게 */
     const t = load("qb_tablet");
     if (t && t.code === c && s.val().groups?.[t.gid]) choose(t.gid);
     else { myGid = null; room = room || s.val(); show("pick"); renderPick(); }
@@ -850,18 +860,20 @@ function renderPick(){
 }
 function choose(g){
   myGid = g;
-  save("qb_tablet", { code, gid: g });
+  save("qb_tablet", { code, gid: g, at: Date.now() });
   dropPresence();
   presenceRef = roomRef.child(`online/${g}/${sessionId}`);
-  presenceRef.set(true); presenceRef.onDisconnect().remove();
+  markOnline();
   show("buzz");
   renderTablet();
 }
+/* 인터넷이 끊겼다 다시 이어지면 '연결됨' 표시도 다시 켜기 */
+function markOnline(){ if (!presenceRef) return; presenceRef.set(true); presenceRef.onDisconnect().remove(); }
 function dropPresence(){ if (presenceRef) { presenceRef.onDisconnect().cancel(); presenceRef.remove(); presenceRef = null; } }
 
 let pressedAttempt = -1, winSoundAttempt = -1;
 function press(e){
-  e.preventDefault();
+  e.preventDefault(); unlockAudio();
   if (!room || !myGid) return;
   if (room.phase !== "open" || (room.locked || {})[myGid] || pressedAttempt === room.attempt) return;
   const att = room.attempt;
@@ -873,7 +885,10 @@ function press(e){
 
 function renderTablet(){
   if (role !== "tablet" && !PREVIEW) return;
-  if (!room) { toast("방이 닫혔어요. 코드를 다시 입력해 주세요"); show("join"); return; }
+  if (!room) {
+    if (roomLoaded) { toast("방이 닫혔어요. 코드를 다시 입력해 주세요"); leaveRoom(); show("join"); }
+    return;
+  }
   if (!$("#pick").hidden) { renderPick(); return; }
   if (!myGid) return;
   const G = room.groups || {}, me = G[myGid];
